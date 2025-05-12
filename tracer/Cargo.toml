@@ -1,0 +1,14 @@
+[package]
+name = "tracer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotenv = "0.15.0"
+futures-util = "0.3.31"
+poem = { version = "3.1.10", features = ["websocket"] }
+tokio = { version = "1.44.2", features = ["rt-multi-thread"] }
+tracing-subscriber = "0.3"
+tracer_macros = { path = "../tracer_macros" }
+serde_json = "1.0.140"
+serde = "1.0.219"
