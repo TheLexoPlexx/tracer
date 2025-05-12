@@ -1,7 +1,9 @@
+#![allow(dead_code)]
+
 use dotenv::dotenv;
 use poem::{EndpointExt, Route, Server, listener::TcpListener};
 use poem_openapi::OpenApiService;
-use sqlx::PgPool;
+use sqlx::{PgPool, Pool, Postgres};
 use std::{
     env::var,
     fs::{self},
@@ -11,10 +13,10 @@ use tokio::time::Duration;
 use tracerapi::TracerApi;
 
 #[derive(Clone)]
-struct ApiData(PgPool, Sender<String>);
+struct ApiData(Option<PgPool>, Sender<String>);
 
 impl ApiData {
-    fn postgres_pool(&self) -> &PgPool {
+    fn postgres_pool(&self) -> &Option<PgPool> {
         &self.0
     }
 
@@ -44,22 +46,20 @@ async fn main() {
     let host = var("HOST").unwrap_or("0.0.0.0".to_string());
     let port = var("PORT").unwrap_or("4000".to_string());
     let version = var("CARGO_PKG_VERSION").expect("Failed to read Cargo.toml");
-    let pg_url = var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pg_pool: Option<Pool<Postgres>> = match var("DATABASE_URL") {
+        Ok(pg_url) => match PgPool::connect(&pg_url).await {
+            Ok(pool) => Some(pool),
+            Err(e) => {
+                eprintln!("> Not connected to PostgreSQL-Database: {}", e);
+                return;
+            }
+        },
+        Err(_) => None,
+    };
 
     let api_path = "/";
     let explorer_path = "/explorer";
     let endpoint_path = "/endpoint";
-
-    let pg_pool = match PgPool::connect(&pg_url).await {
-        Ok(pool) => {
-            println!("> Connected to PostgreSQL-Database");
-            pool
-        }
-        Err(e) => {
-            eprintln!("Failed to connect to PostgreSQL-Database: {}", e);
-            return;
-        }
-    };
 
     let description = match fs::read_to_string("description.html") {
         Ok(desc) => desc,
@@ -75,7 +75,13 @@ async fn main() {
     let explorer = api_service.openapi_explorer();
 
     let websocket_channel = tokio::sync::mpsc::channel::<String>(32);
-    let data = ApiData(pg_pool, websocket_channel.0);
+
+    let data = if pg_pool.is_some() {
+        println!("> Connected to PostgreSQL-Database");
+        ApiData(pg_pool, websocket_channel.0)
+    } else {
+        ApiData(None, websocket_channel.0)
+    };
 
     let route = Route::new()
         .nest(
@@ -86,7 +92,7 @@ async fn main() {
             endpoint_path.to_string() + "/json",
             api_service.spec_endpoint(),
         )
-        .nest("/ws/:name", websocket_handler::websocket)
+        .at("/ws/:name", websocket_handler::websocket)
         .nest(api_path, api_service)
         .nest(explorer_path, explorer)
         .data(data);

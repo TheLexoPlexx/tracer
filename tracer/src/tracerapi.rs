@@ -1,6 +1,5 @@
 use core::fmt;
-use poem::Result;
-use poem_openapi::{OpenApi, payload::Json};
+use poem_openapi::{OpenApi, payload::PlainText};
 use std::error::Error;
 
 #[derive(Debug)]
@@ -18,15 +17,11 @@ pub struct TracerApi;
 
 #[OpenApi]
 impl TracerApi {
-    // /// Rexx-Events
-    // ///
-    // /// Gibt alle Ereignisse aus einem bestimmten Kalender zurück von rexx
-    // #[oai(path = "/rexx/events", method = "post")]
-    // async fn users_rexx(
-    //     &self,
-    //     _auth: ApiAuthorization,
-    //     rexx_url: Json<RexxUrlRequest>,
-    // ) -> Result<Json<Vec<RexxEvent>>> {
-    //     Ok(Json(events))
-    // }
+    /// Ping
+    ///
+    /// Gibt "pong" zurück
+    #[oai(path = "/ping", method = "get")]
+    async fn ping(&self) -> PlainText<String> {
+        PlainText("pong".to_string())
+    }
 }
