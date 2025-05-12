@@ -104,7 +104,6 @@ async fn main() {
     println!("> Version: {version}");
 
     //  TODO: Refactor, so that the server is only created once
-    //  Issue URL: https://github.com/TheLexoPlexx/tracer/issues/2
 
     Server::new(TcpListener::bind(&listener_adress))
         .name("Tracer-API")
@@ -115,7 +114,6 @@ async fn main() {
                 println!("Received Ctrl+C, Shutting down...");
             },
             Some(Duration::from_secs(5)), //TODO: Was macht das?
-                                          //Issue URL: https://github.com/TheLexoPlexx/tracer/issues/1
         )
         .await
         .expect("Failed to start server.");
