@@ -1,79 +1,35 @@
 use dotenv::dotenv;
-use futures_util::{SinkExt, StreamExt};
-use poem::{
-    EndpointExt, IntoResponse, Route, Server, get, handler,
-    listener::TcpListener,
-    web::{
-        Data, Path,
-        websocket::{Message, WebSocket},
-    },
+use poem::{EndpointExt, Route, Server, listener::TcpListener};
+use poem_openapi::OpenApiService;
+use sqlx::PgPool;
+use std::{
+    env::var,
+    fs::{self},
 };
-use serde_json::from_str;
-use structure::WsRequest;
-use tokio::spawn;
-use util::WsResponse;
+use tokio::sync::mpsc::Sender;
+use tokio::time::Duration;
+use tracerapi::TracerApi;
 
-mod structure;
-mod util;
+#[derive(Clone)]
+struct ApiData(PgPool, Sender<String>);
 
-#[handler]
-fn websocket(
-    Path(name): Path<String>,
-    ws: WebSocket,
-    sender: Data<&tokio::sync::mpsc::Sender<String>>,
-) -> impl IntoResponse {
-    let sender = sender.clone();
+impl ApiData {
+    fn postgres_pool(&self) -> &PgPool {
+        &self.0
+    }
 
-    ws.on_upgrade(move |socket| async move {
-        let (mut sink, mut stream) = socket.split();
-        println!("WebSocket connection established for: {name}");
-
-        let response = WsResponse::new("connected".to_string());
-
-        sink.send(Message::Text(serde_json::to_string(&response).unwrap()))
-            .await
-            .expect("Failed to send message to channel");
-
-        // Task: Nachrichten vom Client empfangen und an den Server schicken
-        let sender_clone = sender.clone();
-        spawn(async move {
-            while let Some(Ok(msg)) = stream.next().await {
-                if let Message::Text(text) = msg {
-                    match from_str::<WsRequest>(&text) {
-                        Ok(json) => {
-                            println!("Received message in JSON: {:#?} from {name}", json);
-                            sink.send(Message::Text(format!("{name}: {text}")))
-                                .await
-                                .unwrap();
-                        }
-                        Err(_) => {
-                            println!("Received message in plain text: {text} from {name}");
-                        }
-                    }
-
-                    sink.send(Message::Text(format!("{name}: {text}")))
-                        .await
-                        .unwrap();
-                    if sender_clone.send(format!("{name}: {text}")).await.is_err() {
-                        println!("Failed to send message to channel");
-                        break;
-                    }
-                }
-            }
-        });
-
-        // Task: Nachrichten vom Server an den Client schicken
-        // Hier müsstest du einen eigenen Channel für Antworten haben, z.B.:
-        // while let Some(response) = ... {
-        //     if sink.send(Message::Text(response)).await.is_err() {
-        //         break;
-        //     }
-        // }
-    })
+    fn websocket_channel(&self) -> &Sender<String> {
+        &self.1
+    }
 }
 
+mod structure;
+mod tracerapi;
+mod util;
+mod websocket_handler;
+
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() {
     println!("Starting server...");
 
     dotenv().ok();
@@ -85,13 +41,74 @@ async fn main() -> Result<(), std::io::Error> {
     }
     tracing_subscriber::fmt::init();
 
-    let port = std::env::var("PORT").unwrap_or("4000".to_string());
-    let host = std::env::var("HOST").unwrap_or("0.0.0.0".to_string());
+    let host = var("HOST").unwrap_or("0.0.0.0".to_string());
+    let port = var("PORT").unwrap_or("4000".to_string());
+    let version = var("CARGO_PKG_VERSION").expect("Failed to read Cargo.toml");
+    let pg_url = var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let channel = tokio::sync::mpsc::channel::<String>(32);
-    let app = Route::new().at("/:name", get(websocket.data(channel.0)));
+    let api_path = "/";
+    let explorer_path = "/explorer";
+    let endpoint_path = "/endpoint";
 
-    Server::new(TcpListener::bind(format!("{host}:{port}")))
-        .run(app)
+    let pg_pool = match PgPool::connect(&pg_url).await {
+        Ok(pool) => {
+            println!("> Connected to PostgreSQL-Database");
+            pool
+        }
+        Err(e) => {
+            eprintln!("Failed to connect to PostgreSQL-Database: {}", e);
+            return;
+        }
+    };
+
+    let description = match fs::read_to_string("description.html") {
+        Ok(desc) => desc,
+        Err(_) => {
+            println!("Failed to read description.html. Using default.");
+            "<b>Tracer-API</b></br><p>Failed to read description.html</p>".to_string()
+        }
+    };
+
+    let api_service = OpenApiService::new(TracerApi, "Tracer-API", "0.1.0")
+        .server(api_path)
+        .description(description);
+    let explorer = api_service.openapi_explorer();
+
+    let websocket_channel = tokio::sync::mpsc::channel::<String>(32);
+    let data = ApiData(pg_pool, websocket_channel.0);
+
+    let route = Route::new()
+        .nest(
+            endpoint_path.to_string() + "/yaml",
+            api_service.spec_endpoint_yaml(),
+        )
+        .nest(
+            endpoint_path.to_string() + "/json",
+            api_service.spec_endpoint(),
+        )
+        .nest("/ws/:name", websocket_handler::websocket)
+        .nest(api_path, api_service)
+        .nest(explorer_path, explorer)
+        .data(data);
+
+    let listener_adress = format!("{host}:{port}");
+
+    println!("> Explorer: http://{listener_adress}{explorer_path}");
+    println!("> API: http://{listener_adress}{api_path}");
+    println!("> Version: {version}");
+
+    //  TODO: Refactor, so that the server is only created once
+
+    Server::new(TcpListener::bind(&listener_adress))
+        .name("Tracer-API")
+        .run_with_graceful_shutdown(
+            route,
+            async move {
+                let _ = tokio::signal::ctrl_c().await;
+                println!("Received Ctrl+C, Shutting down...");
+            },
+            Some(Duration::from_secs(5)), //TODO: Was macht das?
+        )
         .await
+        .expect("Failed to start server.");
 }
