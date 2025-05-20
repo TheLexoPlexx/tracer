@@ -12,6 +12,13 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 use tracerapi::TracerApi;
 
+use structure::{Cable, Colour, Component, Loom};
+
+mod structure;
+mod tracerapi;
+mod util;
+mod websocket_handler;
+
 #[derive(Clone)]
 struct ApiData(Option<PgPool>, Sender<String>);
 
@@ -24,11 +31,6 @@ impl ApiData {
         &self.1
     }
 }
-
-mod structure;
-mod tracerapi;
-mod util;
-mod websocket_handler;
 
 #[tokio::main]
 async fn main() {
@@ -46,12 +48,13 @@ async fn main() {
     let host = var("HOST").unwrap_or("0.0.0.0".to_string());
     let port = var("PORT").unwrap_or("4000".to_string());
     let version = var("CARGO_PKG_VERSION").expect("Failed to read Cargo.toml");
+
     let pg_pool: Option<Pool<Postgres>> = match var("DATABASE_URL") {
         Ok(pg_url) => match PgPool::connect(&pg_url).await {
             Ok(pool) => Some(pool),
             Err(e) => {
                 eprintln!("> Not connected to PostgreSQL-Database: {}", e);
-                return;
+                None
             }
         },
         Err(_) => None,
@@ -69,9 +72,27 @@ async fn main() {
         }
     };
 
-    let api_service = OpenApiService::new(TracerApi, "Tracer-API", "0.1.0")
-        .server(api_path)
-        .description(description);
+    let api_service = OpenApiService::new(
+        (
+            TracerApi,
+            Colour::create_api(),
+            Cable::create_api(),
+            Loom::create_api(),
+            Component::create_api(),
+            Colour::read_api(),
+            Cable::read_api(),
+            Loom::read_api(),
+            Component::read_api(),
+            Colour::update_api(),
+            Cable::update_api(),
+            Loom::update_api(),
+            Component::update_api(),
+        ),
+        "Tracer-API",
+        "0.1.0",
+    )
+    .server(api_path)
+    .description(description);
     let explorer = api_service.openapi_explorer();
 
     let websocket_channel = tokio::sync::mpsc::channel::<String>(32);
@@ -102,8 +123,6 @@ async fn main() {
     println!("> Explorer: http://{listener_adress}{explorer_path}");
     println!("> API: http://{listener_adress}{api_path}");
     println!("> Version: {version}");
-
-    //  TODO: Refactor, so that the server is only created once
 
     Server::new(TcpListener::bind(&listener_adress))
         .name("Tracer-API")

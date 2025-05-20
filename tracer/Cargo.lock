@@ -1988,6 +1988,7 @@ dependencies = [
 name = "tracer_macros"
 version = "0.1.0"
 dependencies = [
+ "poem-openapi",
  "proc-macro2",
  "quote",
  "serde",
