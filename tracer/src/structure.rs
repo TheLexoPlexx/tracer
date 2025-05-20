@@ -1,9 +1,9 @@
 use poem_openapi::{Object, OpenApi, param::Path, payload::Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracer_macros::{Create, Delete, Read, Update};
+use tracer_macros::CRUD;
 
-#[derive(Create, Read, Update, Delete, Debug, Serialize, Deserialize, Clone, Object)]
+#[derive(CRUD, Debug, Serialize, Deserialize, Clone, Object)]
 pub struct Colour {
     id: String,
     display_name: String,
@@ -13,7 +13,7 @@ pub struct Colour {
     blue: u8,
 }
 
-#[derive(Create, Read, Update, Delete, Debug, Serialize, Deserialize, Clone, Object)]
+#[derive(CRUD, Debug, Serialize, Deserialize, Clone, Object)]
 pub struct Cable {
     id: String,
     cross_section: f32,
@@ -23,14 +23,14 @@ pub struct Cable {
     signal_type: Option<String>,
 }
 
-#[derive(Create, Read, Update, Delete, Debug, Serialize, Deserialize, Clone, Object)]
+#[derive(CRUD, Debug, Serialize, Deserialize, Clone, Object)]
 pub struct Loom {
     id: String,
     name: String,
     original_label: String,
 }
 
-#[derive(Create, Read, Update, Delete, Debug, Serialize, Deserialize, Clone, Object)]
+#[derive(CRUD, Debug, Serialize, Deserialize, Clone, Object)]
 pub struct Component {
     id: String,
     name: String,
