@@ -11,17 +11,20 @@ pub fn derive_crud(input: TokenStream) -> TokenStream {
     let api_name = Ident::new(&format!("{}Api", name), Span::call_site());
 
     let create_fn = Ident::new(&format!("create_{}", name_str), Span::call_site());
-    let create_path = format!("/{}/create", name_str);
+    let create_path = format!("/{}", name_str);
 
     let read_fn = Ident::new(&format!("read_{}", name_str), Span::call_site());
-    let read_path = format!("/{}/read/{{id}}", name_str);
+    let read_path = format!("/{}/{{id}}", name_str);
+
+    let readall_fn = Ident::new(&format!("readall_{}", name_str), Span::call_site());
+    let readall_path = format!("/{}", name_str);
 
     let builder_name = Ident::new(&format!("{}UpdateBuilder", name), Span::call_site());
     let update_fn = Ident::new(&format!("update_{}", name_str), Span::call_site());
-    let update_path = format!("/{}/update/{{id}}", name_str);
+    let update_path = format!("/{}/{{id}}", name_str);
 
     let delete_fn = Ident::new(&format!("delete_{}", name_str), Span::call_site());
-    let delete_path = format!("/{}/delete/{{id}}", name_str);
+    let delete_path = format!("/{}/{{id}}", name_str);
 
     let fields = match &input.data {
         syn::Data::Struct(syn::DataStruct { fields, .. }) => fields,
@@ -62,20 +65,10 @@ pub fn derive_crud(input: TokenStream) -> TokenStream {
                 todo!();
             }
 
-            pub fn delete(id_to_delete: String) -> Result<(), String> {
+            pub fn readall() -> Result<Vec<Self>, String> {
                 todo!();
             }
 
-            pub fn api() -> #api_name {
-                #api_name
-            }
-        }
-
-        pub struct #builder_name {
-            #builder_fields
-        }
-
-        impl #name {
             pub fn update(&self) -> #builder_name {
                 #builder_name {
                     #(
@@ -83,6 +76,22 @@ pub fn derive_crud(input: TokenStream) -> TokenStream {
                     )*
                 }
             }
+
+            pub fn delete(id_to_delete: String) -> Result<(), String> {
+                todo!();
+            }
+
+            pub fn api() -> #api_name {
+                #api_name
+            }
+
+            pub fn populate_database(&self) -> Result<(), String> {
+                todo!()
+            }
+        }
+
+        pub struct #builder_name {
+            #builder_fields
         }
 
         impl #builder_name {
@@ -115,7 +124,13 @@ pub fn derive_crud(input: TokenStream) -> TokenStream {
                 todo!();
             }
 
-            #[oai(path = #update_path, method = "put")]
+            #[oai(path = #readall_path, method = "get")]
+            async fn #readall_fn(&self) -> Json<#name> {
+                let result = #name::readall();
+                todo!();
+            }
+
+            #[oai(path = #update_path, method = "patch")]
             async fn #update_fn(&self, Path(id): Path<String>, data: Json<#name>) -> Json<#name> {
                 todo!()
             }

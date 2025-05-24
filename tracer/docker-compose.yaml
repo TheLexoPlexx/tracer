@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: tracer
+    ports:
+      - 6000:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  postgrest:
+    image: postgrest/postgrest:v13.0.0
+    depends_on:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6002/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      PGRST_DB_URI: postgres://postgres:postgres@db:5432/tracer
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: postgres
+      PGRST_SERVER_PORT: 6001
+      PGRST_ADMIN_SERVER_PORT: 6002
+    ports:
+      - 6001:6001
+
+volumes:
+  pgdata:

@@ -14,3 +14,4 @@ serde_json = "1.0.140"
 serde = "1.0.219"
 sqlx = { version = "0.8.5", features = ["postgres", "runtime-tokio"] }
 poem-openapi = { version = "5.1.14", features = ["openapi-explorer"] }
+sea-query = "0.32.5"
