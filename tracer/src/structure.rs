@@ -43,9 +43,18 @@ pub struct Loom {
 pub struct Component {
     id: String,
     name: String,
-    original_part_number: String,
-    original_label: String,
     pin_count: u16,
+    original_part_number: Option<String>,
+    original_label: Option<String>,
+    location: Option<String>,
+    description: Option<String>,
+}
+
+pub struct Connector {
+    id: String,
+    pin_count: u16,
+    male_connections: Vec<Configuration>,
+    female_connections: Vec<Configuration>,
 }
 
 // A Node, An actual node in the system, differentiated from the component in case multiple of the same component are used in the system
